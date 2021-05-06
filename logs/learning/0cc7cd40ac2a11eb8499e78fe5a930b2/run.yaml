@@ -1,0 +1,16 @@
+comment: ''
+commit: e6e0e09f9947d7fb18e6cbe064f795b2f218f7c9
+commit_message: Initial commit
+is_dirty: false
+load_run: null
+name: learning
+notes: ''
+python_file: learning.py
+repo_remotes:
+- https://github.com/FCChinen/PPO
+start_step: 0
+tags:
+- learning
+trial_date: '2021-05-03'
+trial_time: '13:10:16'
+uuid: 0cc7cd40ac2a11eb8499e78fe5a930b2
