@@ -15,11 +15,14 @@ Esse labirinto é uma versão modificada do labirinto do repositório: https://g
 
 Autor: Felipe Churuyuki Chinen
 """
+
+from network import FeedForwardNN
 import numpy as np
 import tkinter as tk
 from PIL import Image, ImageTk
 import torch
 import time
+from torch.distributions import Categorical
 
 class Maze(tk.Tk, object):
     def __init__(self, N, pixels = 40, p0_lizard = [1,1]):
@@ -31,7 +34,10 @@ class Maze(tk.Tk, object):
         self.sum_reward = 0
 
         # Informações sobre a observação do agente
-        self.obs = np.zeros((self.N, self.N), dtype=np.int32)
+        # Deve ser um array, para facilitar a passagem de parâmetros para a rede neural
+        # A fórmula de conversão de matriz para vetor é: x + self.N * (y-1)
+        self.obs = np.zeros((self.N * self.N), dtype=np.int32) # cria um array do tipo int32 para a observação
+        
 
         # Informações sobre os obstáculos/árvores
         self.trees = np.array([]) # Lista que contém a tupla [x,y] da posição de cada árvore
@@ -42,12 +48,15 @@ class Maze(tk.Tk, object):
 
         # Informações sobre o grilo
         self.cricket_pos = np.array([self.N - 2, self.N - 2])
-        self.obs[self.N - 2][self.N - 2] = 3
+        # Original
+        # self.obs[self.N - 2][self.N - 2] = 3
+        # Modificado:
+        self.obs[(self.N - 2) + (self.N - 1)*(self.N - 2)] = 3
         self.img_cricket = None
 
         # Informações sobre o lagarto
         self.lizard_pos = np.array(p0_lizard)
-        self.obs[p0_lizard[0]][p0_lizard[1]] = 2
+        self.obs[p0_lizard[0] + (self.N - 1)*p0_lizard[1]] = 2
         self.lizard_p0 = np.array(p0_lizard)
         self.lizard_widget = None
         self.img_lizard = None
@@ -151,7 +160,7 @@ class Maze(tk.Tk, object):
         self.trees = trees # Tirando as duplicatas
 
         for tree_x, tree_y in self.trees: # Adiciona as árvores na observação
-            self.obs[tree_x, tree_y] = 1
+            self.obs[tree_x + (self.N-1) * tree_y] = 1
 
 
 
@@ -204,8 +213,8 @@ class Maze(tk.Tk, object):
         old_pos = self.get_lizard_pos()
         self.lizard_pos = new_pos
         
-        self.obs[old_pos[0]][old_pos[1]] = 0
-        self.obs[new_pos[0]][new_pos[1]] = 2
+        self.obs[old_pos[0] + (self.N - 1)*old_pos[1]] = 0
+        self.obs[new_pos[0] + (self.N - 1)*new_pos[1]] = 2
 
     def get_lizard_pos(self):
         return self.lizard_pos
@@ -215,7 +224,6 @@ class Maze(tk.Tk, object):
 
     def get_obs(self):
         return self.obs
-
 
     def posible_actions(self, cur_pos):
         """
@@ -323,11 +331,17 @@ class Maze(tk.Tk, object):
 
 if __name__ == '__main__':
     maze = Maze(8)
+    neuron = FeedForwardNN(64, 4)
     terminate = False
     while (terminate == False):
         action = int(input("digite sua action: 0 down 1 up 2 left 3 right"))
         obs, reward, terminate, _ = maze.step(action)
-        print(str(maze.get_obs_size()))
-        print(reward)
+
+        m = neuron(obs)
+        dist = Categorical(logits = m)
+        print(str(dist))
+        
+        action = dist.sample()
+        print(str(action))
     
     maze.mainloop()
