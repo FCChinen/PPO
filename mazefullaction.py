@@ -16,13 +16,10 @@ Esse labirinto é uma versão modificada do labirinto do repositório: https://g
 Autor: Felipe Churuyuki Chinen
 """
 
-from network import FeedForwardNN
 import numpy as np
 import tkinter as tk
 from PIL import Image, ImageTk
-import torch
 import time
-from torch.distributions import Categorical
 
 class Maze(tk.Tk, object):
     def __init__(self, N, pixels = 40, p0_lizard = [1,1]):
@@ -48,11 +45,19 @@ class Maze(tk.Tk, object):
 
         # Informações sobre o grilo
         self.cricket_pos = np.array([self.N - 2, self.N - 2])
+        self.inter_cricket = np.array([[1, self.N - 2], [2, self.N-2], [1, self.N-3]])
+
         # Original
         # self.obs[self.N - 2][self.N - 2] = 3
         # Modificado:
-        self.obs[(self.N - 2) + (self.N - 1)*(self.N - 2)] = 3
+        self.obs[(self.N - 2) + (self.N - 1)*(self.N - 2)] = 3 # 3 e o codigo do grilo
         self.img_cricket = None
+        
+        # Grilo intermediario
+        self.obs[1+(self.N-1 * self.N-2)] = 4 # posicao intermediara do grilo 1
+        self.obs[2+(self.N-1 * self.N-2)] = 4 # posicao intermediara do grilo 1
+        self.obs[1+(self.N-1 * self.N-1)] = 4 # posicao intermediara do grilo 1
+
 
         # Informações sobre o lagarto
         self.lizard_pos = np.array(p0_lizard)
@@ -90,6 +95,9 @@ class Maze(tk.Tk, object):
         self.img_cricket = Image.open("imgs/cricketconverted.png")
         self.img_cricket = ImageTk.PhotoImage(self.img_cricket)
         self.cricket_widget = self.canvas_widget.create_image(self.pixels * self.cricket_pos[0], self.pixels * self.cricket_pos[1], anchor = 'nw', image=self.img_cricket)
+        self.cricket_widget = self.canvas_widget.create_image(self.pixels * self.inter_cricket[0][0], self.pixels * self.inter_cricket[0][1], anchor = 'nw', image=self.img_cricket)
+        self.cricket_widget = self.canvas_widget.create_image(self.pixels * self.inter_cricket[1][0], self.pixels * self.inter_cricket[1][1], anchor = 'nw', image=self.img_cricket)
+        self.cricket_widget = self.canvas_widget.create_image(self.pixels * self.inter_cricket[2][0], self.pixels * self.inter_cricket[2][1], anchor = 'nw', image=self.img_cricket)
         
     def create_visual_lizard(self):
         img_lizard = Image.open("imgs/lizardconverted.png")
@@ -272,6 +280,18 @@ class Maze(tk.Tk, object):
         elif self.is_tree(self.lizard_pos):
             self.sum_reward -=15
             return -15
+        elif np.array_equal(self.lizard_pos, self.inter_cricket[0]):
+            print('cricket 1')
+            self.sum_reward += 50
+            return 50
+        elif np.array_equal(self.lizard_pos, self.inter_cricket[1]):
+            print('cricket 2')
+            self.sum_reward += 50
+            return 50
+        elif np.array_equal(self.lizard_pos, self.inter_cricket[2]):
+            print('cricket 3')
+            self.sum_reward += 50
+            return 50
         else:
             self.sum_reward -= 1
             return -1
@@ -296,6 +316,7 @@ class Maze(tk.Tk, object):
         while GG == False:
             self.render()
             print(self.lizard_pos)
+            print('cur reward: '+(str(self.get_reward())))
             print("actions: "+str(self.posible_actions(self.lizard_pos)))
             action = int(input("digite sua action: 0 up 1 down 2 left 3 right"))
             move = self.get_next_pos(action)
@@ -306,6 +327,7 @@ class Maze(tk.Tk, object):
         GG = False
         while GG == False:
             self.render()
+            print('cur reward: '+(str(self.get_reward())))
             print("actions: "+str(self.posible_actions(self.lizard_pos)))
             action = int(input("digite sua action: 0 up 1 down 2 left 3 right"))
             move = self.get_next_pos(action)
@@ -331,17 +353,6 @@ class Maze(tk.Tk, object):
 
 if __name__ == '__main__':
     maze = Maze(8)
-    neuron = FeedForwardNN(64, 4)
-    terminate = False
-    while (terminate == False):
-        action = int(input("digite sua action: 0 down 1 up 2 left 3 right"))
-        obs, reward, terminate, _ = maze.step(action)
 
-        m = neuron(obs)
-        dist = Categorical(logits = m)
-        print(str(dist))
-        
-        action = dist.sample()
-        print(str(action))
-    
+    maze.t()
     maze.mainloop()

@@ -9,13 +9,14 @@ from torch import optim
 from torch.distributions import Categorical
 import time
 from typing import Dict, List
+import gym
 
 # Definindo que a cpu ira processar tudo
 device = torch.device("cpu")
 
 # Funcao define a rede neural
 class FeedForwardNN(nn.Module):
-    def __init__(self, in_dim=64, out_dim=4):
+    def __init__(self, in_dim=1, out_dim=4):
         super(FeedForwardNN, self).__init__()
 
         self.layer1 = nn.Linear(in_dim, 128)
@@ -90,7 +91,8 @@ class PPO:
 
         return self.obs
 
-
+    def train(self):
+        pass
 
     def _calc_advantages(self, done : np.ndarray, rewards : np.ndarray, values : np.ndarray) -> np.ndarray:
         advantages = np.zeros((self.max_steps), dtype=np.float32)
@@ -110,7 +112,7 @@ class PPO:
 
         return advantages
 
-    def sample(self) -> (Dict[str, np.ndarray], List):
+    def sample(self):
         # Contém as amostras de cada época
         rewards_array = np.zeros((self.max_steps), dtype=np.int32)
         actions_array = np.zeros((self.max_steps), dtype=np.int32)
@@ -126,10 +128,13 @@ class PPO:
             with torch.no_grad():
                 obs_array[t] = obs
 
-                pi, v = self.model(obs_to_torch(obs))
+                obs = torch.unsqueeze(obs_to_torch(obs), dim=0)
+
+                pi, v = self.model(obs)
                 
                 values_array[t] = v.cpu().numpy()
                 a = pi.sample()
+                print(a)
                 actions_array[t] = a.cpu().numpy()
                 log_pis_array[t] = pi.log_prob(a).cpu().numpy()
                 # Obtendo a informacoes do passo, dado a acao a.
@@ -246,7 +251,7 @@ class PPO:
 
             self.train(samples, learning_rate, clip_range)
 
-            torch.save(self.model.state_dict(), './model.pth')
+            #torch.save(self.model.state_dict(), './model.pth')
 
     def test_loop(self, number_it):
         for i in range(number_it):
@@ -263,7 +268,8 @@ class PPO:
 
 if __name__ == '__main__':
     maze = Maze(8)
-    ppo = PPO(env = maze)
+    env = gym.make('FrozenLake8x8-v0')
+    ppo = PPO(env)
     ppo.run_training_loop()
     print('terminou treinamento')
     ppo.test_loop(100)

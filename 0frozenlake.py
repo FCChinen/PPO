@@ -1,104 +1,75 @@
-# Importing the custom env
-from mazefullaction import Maze
+"""
+0 - Left
+1 - Down
+2 - Right
+3 - Up
+"""
 
+import gym
 import torch
-from torch import nn
-import torch.nn.functional as F
 import numpy as np
-from torch import optim
-from torch.distributions import Categorical
-import time
+from network import FeedForwardNN
 from typing import Dict, List
-
-# Definindo que a cpu ira processar tudo
+import json
 device = torch.device("cpu")
 
-# Funcao define a rede neural
-class FeedForwardNN(nn.Module):
-    def __init__(self, in_dim=64, out_dim=4):
-        super(FeedForwardNN, self).__init__()
-
-        self.layer1 = nn.Linear(in_dim, 128)
-        self.layer2 = nn.Linear(128, 128)
-        #self.layer3 = nn.Linear(128, out_dim)
-        self.pi_logits = nn.Linear(128, out_dim)
-        self.value = nn.Linear(128, 1)
-
-    def forward(self, obs):
-
-        h = F.relu(self.layer1(obs))
-        h = F.relu(self.layer2(h))
-        #output = self.layer3(h)
-        
-        pi = Categorical(logits=self.pi_logits(h))
-        value = self.value(h)
-
-        return pi, value
-
-
-# Funcao que transforma np.ndarray para o tipo Tensor
-# Tambem transforma os valores da observacao no intervalo [0,1]
+# Transforma um np.array pra um tensor
+# E normaliza a entrada para um valor entre 0,1
 def obs_to_torch(obs: np.ndarray) -> torch.Tensor:
-    return torch.tensor(obs, dtype=torch.float32, device=device) / 255.
+    return torch.tensor(obs, dtype=torch.float32, device=device) / 64.
 
 
 class PPO:
-    def __init__(self, env, max_steps = 100):
-     #   self.__init__hyperparameters(max_steps = 100)
-        # Variavel que armazena o ambiente
+    def __init__(self, env, max_steps = 10000):
+
         self.env = env
 
-        # Hyper-paraemtros
-        # Numero maximo de passos numa epoca
+        #Hyper Parametros
         self.max_steps = max_steps
-        # 
+        # Fator de desconto
         self.gamma = 0.95
-        # Quantidade de epocas
+        # Quantidade de épocas
         self.epochs = 4
-        # Tamanho de uma batch(Esse tamanho ditara a quantidade de amostras para fazer uma atualizacao da politica)
+        # Quantidade de passos que tera uma batch
         self.batch_size = self.max_steps
-        # Tamanho de uma mini batch
-        self.mini_batch_size = 4
-        #
+        # Tamanho de uma mini batch !
+        self.mini_batch_size = int(self.batch_size/10)
+        # quantidade de atualizações que ocorrerá na politica
         self.updates = 1000
 
-        # Armazena a soma de todas as recompensas ate o ponto T que se encontra
+        # Soma das recompensas
         self.sum_rewards = 0
-        self.obs = []
+        self.obs = [] # !
 
-        # Criando o modelo da rede neural
-        self.model = FeedForwardNN().to(device)
-        self.optimizer = optim.Adam(self.model.parameters(), lr=2.5e-4)
+        # Inicializa o modelo da rede neural
+        self.model = FeedForwardNN(in_dim = 1, out_dim = 4)
 
-    #def __init__hyperparameters(self, max_steps):
-         # Quantidade maxima passos numa época
-
-
+        # Array que contem a loss
+        self.loss = []
     def step(self, action):
-        """
-        Essa funcao descreve cada passo do treinamento.
-        """
+
         obs, reward, done, _ = self.env.step(action)
-
-        #self.sum_rewards.append(reward)
-
+        obs = obs_to_torch(obs)
+        obs = obs.unsqueeze(dim=0) # Transforma a entrada de tensor(x) tensor([x]), basicamente um tratamento para utilizar na rede neural
         return obs, reward, done
 
     def reset(self):
-        self.obs = self.env.reset()
-        self.sum_rewards = [] # Reseta o array que contem as recompensas acumuladas
-
-        return self.obs
-
-
+        obs = self.env.reset()
+        obs = obs_to_torch(obs)
+        obs = obs.unsqueeze(dim=0) # Transforma a entrada de tensor(x) tensor([x]), basicamente um tratamento para utilizar na rede neural
+        self.sum_rewards = []
+        return obs
 
     def _calc_advantages(self, done : np.ndarray, rewards : np.ndarray, values : np.ndarray) -> np.ndarray:
+        # Essa função calcula as vantagens
+        # Voltar nessa função quando ela aparecer no código
         advantages = np.zeros((self.max_steps), dtype=np.float32)
         last_advantage = 0
 
         _, last_value = self.model(obs_to_torch(self.obs))
         last_value = last_value.cpu().data
-
+        
+        # Calcula de ordem reversa Não sei explicar o porque de fato
         for t in reversed(range(self.max_steps)):
             mask = 1.0 - done[t]
             last_value = last_value * mask
@@ -110,37 +81,39 @@ class PPO:
 
         return advantages
 
-    def sample(self) -> (Dict[str, np.ndarray], List):
+    def sample(self):
         # Contém as amostras de cada época
         rewards_array = np.zeros((self.max_steps), dtype=np.int32)
         actions_array = np.zeros((self.max_steps), dtype=np.int32)
         done_array = np.zeros((self.max_steps), dtype=np.bool)
-        obs_array = np.zeros((self.max_steps, 64), dtype=np.int32) # 64 é o numero de posicoes que o agente pode navegar
+        obs_array = np.zeros((self.max_steps), dtype=np.int32) # 64 é o numero de posicoes que o agente pode navegar
         log_pis_array = np.zeros((self.max_steps), dtype=np.float32) # log da politica
         values_array = np.zeros((self.max_steps), dtype=np.float32) # value function
 
-        obs = self.reset() # Armazenando a ultima observacao
+        self.obs = self.reset() # Armazenando a ultima observacao
         # Cada passo do treinamento
 
         for t in range(self.max_steps): 
             with torch.no_grad():
-                obs_array[t] = obs
+                obs_array[t] = self.obs
 
-                pi, v = self.model(obs_to_torch(obs))
+                pi, v = self.model(self.obs)
                 
                 values_array[t] = v.cpu().numpy()
                 a = pi.sample()
                 actions_array[t] = a.cpu().numpy()
+                action=int(a.cpu().numpy())
                 log_pis_array[t] = pi.log_prob(a).cpu().numpy()
                 # Obtendo a informacoes do passo, dado a acao a.
-                new_obs, new_reward, new_done = self.step(a)
+                self.obs, new_reward, new_done = self.step(action)
 
-                obs_array[t,:] = new_obs
+                obs_array[t] = self.obs
+                #import pdb; breakpoint()
                 rewards_array[t] = new_reward
                 done_array[t] = new_done
 
                 if new_done == True:
-                    break
+                    self.obs = self.reset()
 
 
         # Calcula a vantagem(Generalized Advantage Estimator)
@@ -160,25 +133,31 @@ class PPO:
         for k, v in samples.items():
             #v = v.reshape(v.shape[0] * v.shape[1], *v.shape[2:])
             if k == 'obs':
-                samples_flat[k] = obs_to_torch(v)
+                #samples_flat[k] = torch.unsqueeze(obs_to_torch(v),0)
+                samples_flat[k] = (obs_to_torch(v))
             else:
                 samples_flat[k] = torch.tensor(v, device=device)
-        print(len(obs_array))
+
         return samples_flat
+
 
     def train(self, samples: Dict[str, torch.Tensor], learning_rate: float, clip_range: float):
         for _ in range(self.epochs):
             # Obtendo o index das amostras de maneira aleatória
             idx = torch.randperm(self.batch_size)
-
+            # Está criando o loop que irá descrever o processo de atualização da politica
+            # o mini_batch dita a quantidade de observacoes
             for start in range(0, self.batch_size, self.mini_batch_size):
-                end = start + self.mini_batch_size
+                end = start + self.mini_batch_size 
                 mini_batch_idx = idx[start : end]
                 mini_batch = {}
+                
                 for k, v in samples.items():
                     mini_batch[k] = v[mini_batch_idx]
 
                 loss = self._calc_loss(clip_range = clip_range, samples=mini_batch)
+
+                self.loss.append(loss)
 
                 for pg in self.optimizer.param_groups:
                     pg['lr'] = learning_rate
@@ -193,15 +172,19 @@ class PPO:
         """#### Normalize advantage function"""
         return (adv - adv.mean()) / (adv.std() + 1e-8) # Normalizando, foi adicionado 1e-8 para garantir que não haja divisao por zero
 
+
     def _calc_loss(self, samples: Dict[str, torch.Tensor], clip_range : float) -> torch.Tensor:
-        sampled_return = samples['values'] + samples['advantage'] # 
+        # sample['values'] and samples['advantage'] sao logs
+        # queremos calcular pi_new / pi_old
+        # como são logs, utilizamos a seguinte propriedade
+        # log(a-b) = log a / log b
+        sampled_return = samples['values'] + samples['advantage'] 
 
         sampled_normalized_advantage = self._normalize(samples['advantage']) # normalization <- is it actually needed? !
-
+        import pdb; breakpoint()
         pi, value = self.model(samples['obs']) # retreaving information about the model, the policy and the value-fuction
 
         log_pi = pi.log_prob(samples['actions']) # applying log to the probility !
-
 
         ratio = torch.exp(log_pi - samples['log_pis']) # new_policy - old_policy
 
@@ -236,6 +219,7 @@ class PPO:
 
         return loss
 
+
     def run_training_loop(self):
         for update in range(self.updates):
             progress = update/self.updates
@@ -246,7 +230,6 @@ class PPO:
 
             self.train(samples, learning_rate, clip_range)
 
-            torch.save(self.model.state_dict(), './model.pth')
 
     def test_loop(self, number_it):
         for i in range(number_it):
@@ -258,12 +241,30 @@ class PPO:
                 obs, reward, done, _ = self.env.step(action)
                 obs = obs = obs_to_torch(obs)
                 time.sleep(1)
-                print(str(done))
+                #print(str(done))
 
 
-if __name__ == '__main__':
-    maze = Maze(8)
-    ppo = PPO(env = maze)
+
+if __name__ == "__main__":
+    env = gym.make('FrozenLake8x8-v0')
+    ppo = PPO(env)
     ppo.run_training_loop()
-    print('terminou treinamento')
     ppo.test_loop(100)
+
+
+"""
+FrozenLake8x8-v0
+The agent controls the movement of a character in a grid world. Some tiles of the grid are walkable, and others lead to the agent falling into the water. Additionally, the movement direction of the agent is uncertain and only partially depends on the chosen direction. The agent is rewarded for finding a walkable path to a goal tile.
+
+Winter is here. You and your friends were tossing around a frisbee at the park when you made a wild throw that left the frisbee out in the middle of the lake. The water is mostly frozen, but there are a few holes where the ice has melted. If you step into one of those holes, you'll fall into the freezing water. At this time, there's an international frisbee shortage, so it's absolutely imperative that you navigate across the lake and retrieve the disc. However, the ice is slippery, so you won't always move in the direction you intend.
+
+The surface is described using a grid like the following:
+
+SFFF       (S: starting point, safe)
+FHFH       (F: frozen surface, safe)
+FFFH       (H: hole, fall to your doom)
+HFFG       (G: goal, where the frisbee is located)
+The episode ends when you reach the goal or fall in a hole. You receive a reward of 1 if you reach the goal, and zero otherwise.
+
+VIEW SOURCE ON GITHUB
+"""
