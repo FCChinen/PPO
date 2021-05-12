@@ -33,21 +33,22 @@ class FeedForwardNN(nn.Module):
 
 neural = FeedForwardNN(1,4)
 
-env = gym.make('FrozenLake8x8-v0')
+env = gym.make('FrozenLake-v0', is_slippery=False)
 
 obs = obs_to_torch(env.reset())
+print('acabou de resetar: '+str(obs))
 # Jogar manualmente
 for _ in range(1000):
     env.render()
-    pi, value = neural(obs.unsqueeze(dim=0))
+    #pi, value = neural(obs.unsqueeze(dim=0))
     for i in range(10):
-        print(pi)
-        a = pi.sample()
-        print(a)
-        a = int(a.cpu().numpy())
-    action = int(input("Digite uma ação entre: "+ str(env.action_space)))
+        #print(pi)
+        #a = pi.sample()
+        #print(a)
+        #a = int(a.cpu().numpy())
+    	action = int(input("Digite uma ação entre: "+ str(env.action_space)))
 
-    obs, reward, done, _ = env.step(a)
+    obs, reward, done, _ = env.step(action)
     print('b4 ' + str(obs))
     obs = obs_to_torch(obs)
     print('after: '+str(obs))

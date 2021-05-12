@@ -10,6 +10,7 @@ import torch
 import numpy as np
 from network import FeedForwardNN
 from typing import Dict, List
+from torch import optim
 import json
 device = torch.device("cpu")
 
@@ -20,7 +21,7 @@ def obs_to_torch(obs: np.ndarray) -> torch.Tensor:
 
 
 class PPO:
-    def __init__(self, env, max_steps = 10000):
+    def __init__(self, env, max_steps = 100):
 
         self.env = env
 
@@ -33,16 +34,19 @@ class PPO:
         # Quantidade de passos que tera uma batch
         self.batch_size = self.max_steps
         # Tamanho de uma mini batch !
-        self.mini_batch_size = int(self.batch_size/10)
+        self.mini_batch_size = self.batch_size//10
         # quantidade de atualizações que ocorrerá na politica
-        self.updates = 1000
+        self.updates = 4
 
         # Soma das recompensas
         self.sum_rewards = 0
         self.obs = [] # !
-
+        
+        
         # Inicializa o modelo da rede neural
         self.model = FeedForwardNN(in_dim = 1, out_dim = 4)
+
+        self.optimizer = optim.Adam(self.model.parameters(), lr=2.5e-4)
 
         # Array que contem a loss
         self.loss = []
@@ -108,7 +112,6 @@ class PPO:
                 self.obs, new_reward, new_done = self.step(action)
 
                 obs_array[t] = self.obs
-                #import pdb; breakpoint()
                 rewards_array[t] = new_reward
                 done_array[t] = new_done
 
@@ -131,7 +134,8 @@ class PPO:
         # Cria um dicionario que contera as amostras
         samples_flat = {}
         for k, v in samples.items():
-            #v = v.reshape(v.shape[0] * v.shape[1], *v.shape[2:])
+            #import pdb; breakpoint()
+            v = v.reshape(-1, 1)
             if k == 'obs':
                 #samples_flat[k] = torch.unsqueeze(obs_to_torch(v),0)
                 samples_flat[k] = (obs_to_torch(v))
@@ -156,7 +160,7 @@ class PPO:
                     mini_batch[k] = v[mini_batch_idx]
 
                 loss = self._calc_loss(clip_range = clip_range, samples=mini_batch)
-
+                
                 self.loss.append(loss)
 
                 for pg in self.optimizer.param_groups:
@@ -181,7 +185,7 @@ class PPO:
         sampled_return = samples['values'] + samples['advantage'] 
 
         sampled_normalized_advantage = self._normalize(samples['advantage']) # normalization <- is it actually needed? !
-        import pdb; breakpoint()
+
         pi, value = self.model(samples['obs']) # retreaving information about the model, the policy and the value-fuction
 
         log_pi = pi.log_prob(samples['actions']) # applying log to the probility !
@@ -227,8 +231,9 @@ class PPO:
             clip_range = 0.1 * (1-progress)
             
             samples = self.sample()
-
+            
             self.train(samples, learning_rate, clip_range)
+            print('chegou ate aqui')
 
 
     def test_loop(self, number_it):
@@ -236,7 +241,8 @@ class PPO:
             obs = obs_to_torch(self.env.reset())
             done = False
             while done == False:
-                pi, value = self.model(obs)
+                
+                pi, value = self.model(obs.reshape(1, -1))
                 action = pi.sample()
                 obs, reward, done, _ = self.env.step(action)
                 obs = obs = obs_to_torch(obs)
@@ -249,6 +255,7 @@ if __name__ == "__main__":
     env = gym.make('FrozenLake8x8-v0')
     ppo = PPO(env)
     ppo.run_training_loop()
+    
     ppo.test_loop(100)
 
 
