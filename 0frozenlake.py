@@ -12,6 +12,7 @@ from network import FeedForwardNN
 from typing import Dict, List
 from torch import optim
 import json
+import time
 device = torch.device("cpu")
 
 # Transforma um np.array pra um tensor
@@ -241,18 +242,19 @@ class PPO:
             obs = obs_to_torch(self.env.reset())
             done = False
             while done == False:
-                
+                env.render()
                 pi, value = self.model(obs.reshape(1, -1))
                 action = pi.sample()
-                obs, reward, done, _ = self.env.step(action)
-                obs = obs = obs_to_torch(obs)
+                obs, reward, done, _ = self.env.step(action.tolist()[0])
+                obs = obs_to_torch(obs)
                 time.sleep(1)
-                #print(str(done))
+                if done == True:
+                    print("GG WP")
 
 
 
 if __name__ == "__main__":
-    env = gym.make('FrozenLake8x8-v0')
+    env = gym.make('FrozenLake8x8-v0', is_slippery=False)
     ppo = PPO(env)
     ppo.run_training_loop()
     
