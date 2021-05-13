@@ -29,7 +29,9 @@ class PPO:
         #Hyper Parametros
         self.max_steps = max_steps
         # Fator de desconto
-        self.gamma = 0.95
+        self.gamma = 0.99
+        self.lamda = 0.95
+
         # Quantidade de épocas
         self.epochs = 10
         # Quantidade de passos que tera uma batch
@@ -37,7 +39,7 @@ class PPO:
         # Tamanho de uma mini batch !
         self.mini_batch_size = self.batch_size//10
         # quantidade de atualizações que ocorrerá na politica
-        self.updates = 10
+        self.updates = 50
 
         # Soma das recompensas
         self.sum_rewards = 0
@@ -69,7 +71,7 @@ class PPO:
         # Essa função calcula as vantagens
         # Voltar nessa função quando ela aparecer no código
         advantages = np.zeros((self.max_steps), dtype=np.float32)
-        last_advantage = 0
+        last_advantage = 0.
 
         _, last_value = self.model(obs_to_torch(self.obs))
         last_value = last_value.cpu().data
@@ -82,7 +84,11 @@ class PPO:
 
             delta = rewards[t] + self.gamma + last_value - values[t]
 
-            last_value = values[t]
+            last_advantage = delta + self.gamma * self.lamda * last_advantage
+
+            advantages[t] = last_advantage
+
+            last_value = values[t]            
 
         return advantages
 
@@ -258,10 +264,10 @@ if __name__ == "__main__":
     env = gym.make('FrozenLake-v0', is_slippery=False)
     ppo = PPO(env)
     sample = ppo.run_training_loop()
-    with open('loss.txt', 'w') as f:
-        for idx, loss in enumerate(ppo.loss):
-            f.write('idx: '+ str(idx) + 'loss: ' + str(loss) + '\n')
-    #ppo.test_loop(10)
+    #with open('loss.txt', 'w') as f:
+    #    for idx, loss in enumerate(ppo.loss):
+    #        f.write('idx: '+ str(idx) + 'loss: ' + str(loss) + '\n')
+    ppo.test_loop(10)
 
 
 """
