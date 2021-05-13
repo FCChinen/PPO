@@ -22,7 +22,7 @@ def obs_to_torch(obs: np.ndarray) -> torch.Tensor:
 
 
 class PPO:
-    def __init__(self, env, max_steps = 100):
+    def __init__(self, env, max_steps = 1000):
 
         self.env = env
 
@@ -31,13 +31,13 @@ class PPO:
         # Fator de desconto
         self.gamma = 0.95
         # Quantidade de épocas
-        self.epochs = 4
+        self.epochs = 10
         # Quantidade de passos que tera uma batch
         self.batch_size = self.max_steps
         # Tamanho de uma mini batch !
         self.mini_batch_size = self.batch_size//10
         # quantidade de atualizações que ocorrerá na politica
-        self.updates = 4
+        self.updates = 10
 
         # Soma das recompensas
         self.sum_rewards = 0
@@ -45,7 +45,7 @@ class PPO:
         
         
         # Inicializa o modelo da rede neural
-        self.model = FeedForwardNN(in_dim = 1, out_dim = 4)
+        self.model = FeedForwardNN(in_dim = 1, out_dim = 4, hidden_layer = 16)
 
         self.optimizer = optim.Adam(self.model.parameters(), lr=2.5e-4)
 
@@ -91,7 +91,7 @@ class PPO:
         rewards_array = np.zeros((self.max_steps), dtype=np.int32)
         actions_array = np.zeros((self.max_steps), dtype=np.int32)
         done_array = np.zeros((self.max_steps), dtype=np.bool)
-        obs_array = np.zeros((self.max_steps), dtype=np.int32) # 64 é o numero de posicoes que o agente pode navegar
+        obs_array = np.zeros((self.max_steps), dtype=np.float32) # 64 é o numero de posicoes que o agente pode navegar
         log_pis_array = np.zeros((self.max_steps), dtype=np.float32) # log da politica
         values_array = np.zeros((self.max_steps), dtype=np.float32) # value function
 
@@ -111,8 +111,10 @@ class PPO:
                 log_pis_array[t] = pi.log_prob(a).cpu().numpy()
                 # Obtendo a informacoes do passo, dado a acao a.
                 self.obs, new_reward, new_done = self.step(action)
+                
 
-                obs_array[t] = self.obs
+                obs_array[t] = self.obs.numpy()
+                #import pdb;breakpoint()
                 rewards_array[t] = new_reward
                 done_array[t] = new_done
 
@@ -122,6 +124,7 @@ class PPO:
 
         # Calcula a vantagem(Generalized Advantage Estimator)
         advantage = self._calc_advantages(done_array, rewards_array, values_array) 
+        
 
         # Cria um dicionario que contem as informacoes de cada amostra
         samples = {
@@ -151,7 +154,7 @@ class PPO:
             # Obtendo o index das amostras de maneira aleatória
             idx = torch.randperm(self.batch_size)
             # Está criando o loop que irá descrever o processo de atualização da politica
-            # o mini_batch dita a quantidade de observacoes
+            # o mini_batch dita a quantidade de observacoes por batch
             for start in range(0, self.batch_size, self.mini_batch_size):
                 end = start + self.mini_batch_size 
                 mini_batch_idx = idx[start : end]
@@ -251,14 +254,14 @@ class PPO:
                 if done == True:
                     print("GG WP")
 
-
-
 if __name__ == "__main__":
-    env = gym.make('FrozenLake8x8-v0', is_slippery=False)
+    env = gym.make('FrozenLake-v0', is_slippery=False)
     ppo = PPO(env)
-    ppo.run_training_loop()
-    
-    ppo.test_loop(100)
+    sample = ppo.run_training_loop()
+    with open('loss.txt', 'w') as f:
+        for idx, loss in enumerate(ppo.loss):
+            f.write('idx: '+ str(idx) + 'loss: ' + str(loss) + '\n')
+    #ppo.test_loop(10)
 
 
 """

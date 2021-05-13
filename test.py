@@ -4,6 +4,12 @@ from torch import nn
 from torch.distributions import Categorical
 import numpy as np
 import torch.nn.functional as F
+"""
+0 - Left
+1 - Down
+2 - Right
+3 - Up
+"""
 
 device = "cpu"
 
@@ -41,17 +47,12 @@ print('acabou de resetar: '+str(obs))
 for _ in range(1000):
     env.render()
     #pi, value = neural(obs.unsqueeze(dim=0))
-    for i in range(10):
-        #print(pi)
-        #a = pi.sample()
-        #print(a)
-        #a = int(a.cpu().numpy())
-    	action = int(input("Digite uma ação entre: "+ str(env.action_space)))
+    action = int(input("Digite uma ação entre: "))
 
     obs, reward, done, _ = env.step(action)
-    print('b4 ' + str(obs))
-    obs = obs_to_torch(obs)
-    print('after: '+str(obs))
+    print('obs: ' + str(obs) + 'reward: ' +str(reward) + 'done: '+ str(done))
+    if done:
+        break
 
 
 env.close()
