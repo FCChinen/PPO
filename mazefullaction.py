@@ -76,7 +76,6 @@ class Maze(tk.Tk, object):
         # Essa variável serve apenas para verificar se o jogo está funcionando corretamente
         self.manual = True
         self.rewards = []
-        self.obs4 = np.zeros((4,64,64))
 
         
     # PARTE GRÁFICA
@@ -352,7 +351,7 @@ class Maze(tk.Tk, object):
         return 4
 
 if __name__ == '__main__':
-    maze = Maze(8)
+    maze = Maze(5)
 
     maze.t()
     maze.mainloop()

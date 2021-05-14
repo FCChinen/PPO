@@ -13,6 +13,7 @@ from typing import Dict, List
 from torch import optim
 import json
 import time
+from newmaze import Maze
 device = torch.device("cpu")
 
 # Transforma um np.array pra um tensor
@@ -270,12 +271,9 @@ class PPO:
                     print("GG WP")
 
 if __name__ == "__main__":
-    env = gym.make('FrozenLake-v0', is_slippery=False)
+    env = Maze(8)
     ppo = PPO(env)
     sample = ppo.run_training_loop()
-    #with open('loss.txt', 'w') as f:
-    #    for idx, loss in enumerate(ppo.loss):
-    #        f.write('idx: '+ str(idx) + 'loss: ' + str(loss) + '\n')
     ppo.test_loop(1)
 
 

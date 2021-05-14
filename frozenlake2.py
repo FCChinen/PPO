@@ -39,7 +39,9 @@ class PPO:
         # Tamanho de uma mini batch !
         self.mini_batch_size = self.batch_size//10
         # quantidade de atualizações que ocorrerá na politica
-        self.updates = 50
+        self.updates = 10
+
+        self.max_iterations = 16
 
         # Soma das recompensas
         self.sum_rewards = 0
@@ -103,7 +105,8 @@ class PPO:
 
         self.obs = self.reset() # Armazenando a ultima observacao
         # Cada passo do treinamento
-
+        count_iterations = 0 # Se ele passar um threshold de passos, reseta o ambiente
+        deu_gg = 0
         for t in range(self.max_steps): 
             with torch.no_grad():
                 obs_array[t] = self.obs
@@ -118,14 +121,18 @@ class PPO:
                 # Obtendo a informacoes do passo, dado a acao a.
                 self.obs, new_reward, new_done = self.step(action)
                 
-
-                obs_array[t] = self.obs.numpy()
                 #import pdb;breakpoint()
                 rewards_array[t] = new_reward
                 done_array[t] = new_done
 
-                if new_done == True:
+                if new_done == True or count_iterations > self.max_iterations:
                     self.obs = self.reset()
+                    count_iterations = 0
+                    if new_reward == 1:
+                        deu_gg += 1
+                count_iterations += 1
+
+        #import pdb; breakpoint()
 
 
         # Calcula a vantagem(Generalized Advantage Estimator)
@@ -254,7 +261,7 @@ class PPO:
                 env.render()
                 pi, value = self.model(obs.reshape(1, -1))
                 action = pi.sample()
-                obs, reward, done, _ = self.env.step(action.tolist()[0])
+                obs, reward, done, _ = self.env.step(int(action))
                 obs = obs_to_torch(obs)
                 time.sleep(1)
                 if done == True:
@@ -267,7 +274,7 @@ if __name__ == "__main__":
     #with open('loss.txt', 'w') as f:
     #    for idx, loss in enumerate(ppo.loss):
     #        f.write('idx: '+ str(idx) + 'loss: ' + str(loss) + '\n')
-    ppo.test_loop(10)
+    ppo.test_loop(1)
 
 
 """

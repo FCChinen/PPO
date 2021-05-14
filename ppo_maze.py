@@ -13,6 +13,7 @@ from typing import Dict, List
 from torch import optim
 import json
 import time
+from newmaze import Maze
 device = torch.device("cpu")
 
 # Transforma um np.array pra um tensor
@@ -22,7 +23,7 @@ def obs_to_torch(obs: np.ndarray) -> torch.Tensor:
 
 
 class PPO:
-    def __init__(self, env, max_steps = 1000):
+    def __init__(self, env, max_steps = 10000):
 
         self.env = env
 
@@ -37,7 +38,7 @@ class PPO:
         # Quantidade de passos que tera uma batch
         self.batch_size = self.max_steps
         # Tamanho de uma mini batch !
-        self.mini_batch_size = self.batch_size//10
+        self.mini_batch_size = self.batch_size//100
         # quantidade de atualizações que ocorrerá na politica
         self.updates = 10
 
@@ -57,7 +58,7 @@ class PPO:
         self.loss = []
     def step(self, action):
 
-        obs, reward, done, _ = self.env.step(action)
+        obs, reward, done = self.env.step(action)
         obs = obs_to_torch(obs)
         obs = obs.unsqueeze(dim=0) # Transforma a entrada de tensor(x) tensor([x]), basicamente um tratamento para utilizar na rede neural
         return obs, reward, done
@@ -95,47 +96,51 @@ class PPO:
         return advantages
 
     def sample(self):
-        # Contém as amostras de cada época
-        rewards_array = np.zeros((self.max_steps), dtype=np.int32)
-        actions_array = np.zeros((self.max_steps), dtype=np.int32)
-        done_array = np.zeros((self.max_steps), dtype=np.bool)
-        obs_array = np.zeros((self.max_steps), dtype=np.float32) # 64 é o numero de posicoes que o agente pode navegar
-        log_pis_array = np.zeros((self.max_steps), dtype=np.float32) # log da politica
-        values_array = np.zeros((self.max_steps), dtype=np.float32) # value function
+        rewards_array = []
+        actions_array = []
+        done_array = []
+        obs_array = []
+        log_pis_array = []
+        values_array = []
 
-        self.obs = self.reset() # Armazenando a ultima observacao
-        # Cada passo do treinamento
-        count_iterations = 0 # Se ele passar um threshold de passos, reseta o ambiente
-        deu_gg = 0
-        for t in range(self.max_steps): 
-            with torch.no_grad():
-                obs_array[t] = self.obs
+        ep_qty = 100 # Quantidade de épocas
+        ep_count = 0
+        while ep_count < ep_qty:
+            rewards_cur = []
+            actions_cur = []
+            done_cur = []
+            obs_cur = []
+            log_pis_cur = []
+            values_cur = []
 
-                pi, v = self.model(self.obs)
-                
-                values_array[t] = v.cpu().numpy()
-                a = pi.sample()
-                actions_array[t] = a.cpu().numpy()
-                action=int(a.cpu().numpy())
-                log_pis_array[t] = pi.log_prob(a).cpu().numpy()
-                # Obtendo a informacoes do passo, dado a acao a.
-                self.obs, new_reward, new_done = self.step(action)
-                
+            self.obs = self.reset()
+            finished_ep = False
+            steps_count = 0
+            while ((finished_ep == True) or (steps_count < 50)):
+                with torch.no_grad():
+                    obs_cur.append(self.obs)
 
-                obs_array[t] = self.obs.numpy()
-                #import pdb;breakpoint()
-                rewards_array[t] = new_reward
-                done_array[t] = new_done
+                    pi, v = self.model(self.obs)
 
-                if new_done == True or count_iterations > self.max_iterations:
-                    self.obs = self.reset()
-                    count_iterations = 0
-                    if new_reward == 1:
-                        deu_gg += 1
-                count_iterations += 1
+                    values_cur.append(v.cpu().numpy())
+                    a = pi.sample()
+                    action=int(a.cpu().numpy())
+                    log_pis_cur.append(pi.log_prob(a).cpu().numpy)
 
-        import pdb; breakpoint()
+                    self.obs, new_reward, new_done = self.step(action)
 
+                    rewards_cur.append(new_reward)
+                    done_cur.append(new_done)
+                    finished_ep = new_done
+
+                    if new_done == True:
+                        rewards_array.append(rewards_cur)
+                        actions_array.append(actions_cur)
+                        done_array.append(done_cur)
+                        obs_array.append(obs_cur)
+                        log_pis_array.append(log_pis_cur)
+                        values_array.append(values_cur)
+                        
 
         # Calcula a vantagem(Generalized Advantage Estimator)
         advantage = self._calc_advantages(done_array, rewards_array, values_array) 
@@ -162,8 +167,7 @@ class PPO:
                 samples_flat[k] = torch.tensor(v, device=device)
 
         return samples_flat
-
-
+    
     def train(self, samples: Dict[str, torch.Tensor], learning_rate: float, clip_range: float):
         for _ in range(self.epochs):
             # Obtendo o index das amostras de maneira aleatória
@@ -263,19 +267,16 @@ class PPO:
                 env.render()
                 pi, value = self.model(obs.reshape(1, -1))
                 action = pi.sample()
-                obs, reward, done, _ = self.env.step(int(action))
+                obs, reward, done = self.env.step(int(action))
                 obs = obs_to_torch(obs)
                 time.sleep(1)
                 if done == True:
                     print("GG WP")
 
 if __name__ == "__main__":
-    env = gym.make('FrozenLake-v0', is_slippery=False)
+    env = Maze(5)
     ppo = PPO(env)
     sample = ppo.run_training_loop()
-    #with open('loss.txt', 'w') as f:
-    #    for idx, loss in enumerate(ppo.loss):
-    #        f.write('idx: '+ str(idx) + 'loss: ' + str(loss) + '\n')
     ppo.test_loop(1)
 
 
