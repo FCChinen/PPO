@@ -35,15 +35,22 @@ class Maze(gym.Env):
         self.sum_reward = 0
         # Int que armazenará a observação/posicao do lagarto
         self.obs = (self.N-1)*(self.N-1)
+        # Ultima posicao
+        self.last_obs = (self.N-1)*(self.N-1)
         # posicao das arvores no ambiente
         self.trees = []
         # posicao dos grilos intermediarios
         self.inter_cricket = []
         # posicao do grilo final(Que leva ao final do jogo)
         self.final_cricket = []
+        # array que contém os estados já percorridos pelo agente
+        self.already_walked = [self.obs]
+        # array que contém obstáculos
+        self.obstacles = []
 
         self.create_trees()
         self.create_crickets()
+        self.create_obstacles()
 
 
     def create_trees(self):
@@ -55,19 +62,21 @@ class Maze(gym.Env):
             trees.append(self.N * tree) # Criando árvores da borda lateral da esquerda
             #if (tree != self.N - 2):
             #    trees.append(tree + self.N*tree)
+        self.trees = trees # Tirando as duplicatas
 
+    def create_obstacles(self):
         # Adicionando arvores de obstaculo
         for i in range(2, 8, 2):
             if (i != 6):
-                trees.append(self.tuple_to_int([i,1]))
-            trees.append(self.tuple_to_int([i,3]))
-            trees.append(self.tuple_to_int([i,5]))
+                self.obstacles.append(self.tuple_to_int([i,1]))
+                self.obstacles.append(self.tuple_to_int([i,3]))
+                self.obstacles.append(self.tuple_to_int([i,5]))
 
-        self.trees = trees # Tirando as duplicatas
+
 
     def create_crickets(self):
         #inter cricket
-
+        #self.final_cricket.append(6 + 3*self.N)
         #final cricket
         self.final_cricket.append(self.N-2 + self.N)
 
@@ -81,56 +90,77 @@ class Maze(gym.Env):
                 print("C", end='')
             elif i == self.obs:
                 print("L", end='')
+            elif i in self.obstacles:
+                print("X", end= '')
             else:
                 print("0", end='')
+        print('')
 
     def step(self, action):
-        self.get_next_pos(action)
+        if (self.obs in self.trees):
+            self.obs = self.last_obs
+            rw = self.get_reward()
+        else:
+            self.last_obs = self.obs
+            print('acao tomada: '+ str(action), 'na posicao:', str(self.obs))
+            pos = self.get_next_pos(action)
+            rw = self.get_reward()
+        
         print("rw: "+str(self.get_reward()))
-        #self.render()
-        return self.obs, self.get_reward(), self.terminate(), {}
+
+        return self.obs, rw, self.terminate(), {}
     
     def get_reward(self):
         if self.obs in self.trees:
-            self.sum_reward -= 10000
-            return -1000
+            self.sum_reward -= 50
+            return -50
         elif self.obs in self.final_cricket:
-            self.sum_reward += 1000
-            return 1000
+            self.sum_reward += 50
+            return 50
         elif self.obs in self.inter_cricket:
             self.sum_reward += 5
             return 5
+        elif self.obs in self.obstacles:
+            self.sum_reward -= 5
+            return -5
         else:
-            cur_y = self.obs % self.N
-            cur_x = math.floor(self.obs / self.N)
-            x_cricket = self.final_cricket[0] % self.N
-            y_cricket = math.floor(self.final_cricket[0] / self.N)
-            ret = -1*(cur_x-x_cricket + cur_y-y_cricket)
-            #import pdb;breakpoint()
-            self.sum_reward -= ret
-            return ret
+            """
+            if self.obs in self.already_walked:
+                self.sum_reward -= 1
+                return -1
+            else:
+                self.sum_reward += 1
+                return 1
+            """
+            return -1
 
             #self.sum_reward -=1
             #return -1
 
     def get_next_pos(self, action):
         if action == 0: # down
-            self.obs += self.N 
+            self.obs += self.N
         elif action == 1: #left
             self.obs -= 1
         elif action == 2: # right
             self.obs += 1
         else: #up
             self.obs -= self.N
+        return self.obs
 
     def terminate(self):
-        if self.obs in self.trees or self.obs in self.final_cricket:
+        #if self.obs in self.trees or self.obs in self.final_cricket:
+        #    return True
+        if self.obs in self.final_cricket:
             return True
         else:
             return False
     def reset(self):
+        self.already_walked = []
         self.obs = (self.N-1)*(self.N-1)
+        self.already_walked.append(self.obs)
         self.sum_reward = 0
+        
         return self.obs
 
     def tuple_to_int(self, array):

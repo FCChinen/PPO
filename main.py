@@ -4,20 +4,31 @@ from ppo_torch import Agent
 from newmaze import Maze
 from utils import plot_learning_curve
 
+def took_action(action):
+    if action == 0:
+        print('took action: down')
+    elif action == 1:
+        print('took action: left')
+    elif action == 2:
+        print('took action: right')
+    else:
+        print('took action: up')
+
+
 if __name__ == '__main__':
     #env = gym.make('CartPole-v0')
     #env = gym.make('FrozenLake-v0', is_slippery=False )
-    env = Maze()
-    #env = Maze(8)
+    #env = Maze()
+    env = Maze(8)
     N = 20
     batch_size = 5
     n_epochs = 4
-    alpha = 0.0003
+    alpha = 0.0000003
     #import pdb; breakpoint()
     agent = Agent(n_actions=env.action_space.n, batch_size=batch_size, alpha=alpha, n_epochs=n_epochs, input_dims=(1,)) # frozen lake
     #agent = Agent(n_actions=env.action_space.n, batch_size=batch_size, alpha=alpha, n_epochs=n_epochs, input_dims=env.observation_space.shape) # cartpole
 
-    n_games = 1000
+    n_games = 128
 
     figure_file = 'plots/frozenlake.png'
 
@@ -35,6 +46,7 @@ if __name__ == '__main__':
         
         while not done:
             action, prob, val = agent.choose_action(observation)
+            #took_action(action)
             observation_, reward, done, info = env.step(action)
             n_steps += 1
             score += reward
