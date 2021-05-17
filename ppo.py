@@ -1,93 +1,175 @@
-"""
-Definição de conceitos:
-Passo -> 1 movimento/ação do agente
+import os
+import numpy as np
+import torch as T
+import torch.nn as nn
+import torch.optim as optim
+from torch.distributions.categorical import Categorical
 
-Época -> Quantidade de passos do estado inicial até o final.
-A quantidade de passos por época restringe o tamanho máximo de uma época, ou seja, se o agente não encontrar o seu objetivo a iteração é finalizada.
+class PPOMemory:
+    def __init_(self, batch_size):
+        self.states = []
+        self.probs = []
+        self.vals = []
+        self.actions = []
+        self.rewards = []
+        self.dones = []
 
-Batch -> Quantidade de épocas que serão utilizadas no treinamento.
+        self.batch_size = batch_size
 
+    def generates_batches(self):
+        n_states = len(self.states)
+        batch_start = np.arange(0, n_states, self.batch_size) # Get the beginning of each batch
+        indices = np.arange(n_states, dtype=np.int64) # Idx for every batch
+        np.random.shuffle(indices) # shuffle to get random indices for stochastic gradient ascent
+        batches = [indices[i:i+self.batch_size] for i in batch_start]
+        
+        return np.array(self.states),\
+                np.array(self.actions),\
+                np.array(self.probs),\
+                np.array(self.vals),\
+                np.array(self.actions),\
+                np.array(self.dones),\
+                batches
+    
+    def store_memory(self, state, cation, probs, vals, reward, done):
+        self.state.append(state)
+        self.probs.append(probs)
+        self.vals.append(vals)
+        self.rewards.append(reward)
+        self.dones.append(done)
 
-"""
-import time
-from network import FeedForwardNN
-from torch.distributions import Categorical
-from mazefullaction import Maze
+    def clear_memory(self):
+        self.states = []
+        self.probs = []
+        self.vals = []
+        self.actions = []
+        self.rewards = []
+        self.dones = []
 
-class PPO:
-	#Inicializando o critico e o ator: A2C
-	def __init__(self, env, max_steps, max_epochs):
-		# Inicializando o ambiente
-		self.env = env
+class ActorNetwork(nn.Module):
+    def __init__(self, n_actions, input_dims, alpha,
+        fc1_dims=256, fc2_dims=256):
+        super(ActorNetwork, self).__init__()
+        
+        self.actor = nn.Sequential(
+            nn.Linear(*input_dims, fc1_dims),
+            nn.ReLU(),
+            nn.Linear(fc1_dims, fc2_dims),
+            nn.ReLU(),
+            nn.Linear(fc2_dims, n_actions),
+            nn.Softmax(dim=-1)
+        )
 
-		# Inicializando o ator
-		self.actor = FeedForwardNN(env.get_obs_size() , env.get_action_size())
-		# Inicializando o crítico
-		self.critic = FeedForwardNN(env.get_obs_size(), 1)
+        self.optimizer = optim.Adam(self.parameters(), lr=alpha)
+        self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
+        self.to(self.device)
 
-		self.__init__hyperparameters(max_steps, max_epochs)
+    def forward(self, state):
+        dist = self.actor(state)
+        dist = Categorical(dist)
 
-
-	def __init__hyperparameters(self, max_steps, max_epochs):
-		# Quantidade de passos máximo de uma época
-		self.max_steps = max_steps
-		self.max_epochs = max_epochs
-
-	def get_action(self, obs):
-		# Obtendo a "média" das ações
-		m = self.actor(obs)
-		# Obtém a probabilidade de cada ação ocorrer
-		dist = Categorical(logits=m)
-		# Obtém a ação numa amostragem aleatória
-		action = dist.sample()
-		return action
-
-
-	# Define cada época do treinamento, retorna a observação de todo o trajeto
-	def step(self):
-		# Conta a quantidade de passos feita pelo agente
-		obs_array = []
-		reward_array = []
-		sum_reward_array = []
-
-		epoch_count = 0
-		
-		while epoch_count < self.max_epochs:
-			self.env.reset()
-			step_count = 0
-			sum_reward = 0
-			# primeira iteração
-			self.env.render()
-			while step_count < self.max_steps: # Aqui estamos definindo o tamanho máximo de uma época, sendo max_steps
-				time.sleep(1)
-				obs_array_current = []
-				obs_reward_current = []
-				# Obtendo a observação do ambiente. Não se confunda com a obs obtida no openai gym
-				# Obtendo uma possivel ação dado a observação do ambiente
-				action = (self.get_action(self.env.get_obs()))
-				print(str(action))
-				obs, reward, terminate, _ = self.env.step(action) # Interagindo com o meio(environment)
-				obs_array_current.append(obs)
-				obs_reward_current.append(reward)
-				sum_reward += reward
-				if terminate == True:
-					break
-				step_count += 1
-			obs_array.append(obs_array_current)
-			reward_array.append(obs_reward_current)
-			sum_reward_array.append(sum_reward)
-			epoch_count += 1
+        return dist
 
 
+class CriticNetwork(nn.Module):
+    def __init__(self, input_dims, alpha, fc1_dims=256, fc2_dims=256):
+        super(CriticNetwork).__init__()
 
-	# Função que irá obter as observações obtidas em cada passo de treinamento
-	def sampling(): 
-		# Batch
-		pass
+        self.critic = nn.Sequential(
+            nn.Linear(*input_dims, fc1_dims),
+            nn.ReLU(),
+            nn.Linear(fc1_dims, fc2_dims),
+            nn.ReLU(),
+            nn.Linear(fc2_dims, 1)
+        )
 
+        self.optimizer = optim.Adam(self.parameters(), lr=alpha)
+        self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
+        self.to(self.device)
 
-# Just testing
-if __name__ == "__main__":
-	maze = Maze(8)
-	ppo = PPO(maze, 100, 1)
-	ppo.step()
+    def forward(self, state):
+        value = self.critic
+
+        return value
+
+class Agent:
+    def __init__(self, input_dims, n_actions, gamma=0.99, alpha=0.0003, gae_lambda = 0.95, 
+            policy_clip=0.1, batch_size=64, N=2048, n_epochs=10): # These hyperparam are for continuous env
+        self.gamma = gamma
+        self.policy_clip = policy_clip
+        self.n_epochs = n_epochs
+        self.gae_lambda = gae_lambda
+
+        self.actor = ActorNetwork(n_actions, input_dims, alpha)
+        self.critic = CriticNetwork(input_dims, alpha)
+        self.memory = PPOMemory(batch_size)
+
+    def remeber(self, state, action, probs, vals, rewards, done):
+        self.memory.store_memory(state, action, probs, vals, rewards, done)
+
+    def choose_action(self, observation):
+        state = T.tensor([observation], dtype=T.float).to(self.actor.device)
+
+        dist = self.actor(state)
+        value = self.critic(state)
+        action = dist.sample()
+
+        probs = T.squeeze(dist.log_prob(action)).item()
+        action = T.squeeze(action).item()
+        value = T.squeeze(value).item()
+
+        return action, probs, value
+
+    def learn(self):
+        for _ in range(self.n_epochs):
+            state_arr, action_arr, old_probs_arr, vals_arr,\
+            reward_arr, done_arr, batches =\
+                    self.memory.generates_batches()
+
+            values = vals_arr
+            advantage = np.zeros(len(reward_arr), dtype=np.float32)
+
+            for t in range(len(reward_arr)-1):
+                discount = 1
+                a_t = 0
+                for k in range(t, len(reward_arr) -1):
+                    a_t += discount*(reward_arr[k] + self.gamma*values[k+1]*\
+                    (1-int(done_arr[k]))- values[k])
+                    discount *= self.gamma*self.gae_lambda
+
+                advantage[t] = a_t
+
+            advantage = T.tensor(advantage).to(self.actor.device)
+
+            values = T.tensor(values).to(self.actor.device)
+            for batch in batches:
+                states = T.tensor(state_arr[batch], dtype=T.float).to(self.acto.device)
+                old_probs = T.tensor(old_probs_arr[batch]).to(self.actor.device)
+                actions = T.tensor(action_arr[batch]).to(self.actor.device)
+
+                dist = self.actor(states)
+                critic_value = self.critic(states)
+
+                critic_value = T.squeeze(critic_value)
+
+                new_probs = dist.log_prob(actions)
+                prob_ratio = new_probs.exp() / old_probs.exp()
+                #prob_ratio = (new_probs - old_probs).exp()
+                weighted_probs = advantage[batch] * prob_ratio
+                weighted_clipped_probs = T.clamp(prob_ratio, 1-self.policy_clip,
+                    +self.policy_clip)*advantage[batch]
+                actor_loss = -T,min(weighted_probs, weighted_clipped_probs).mean()
+
+                returns = advantage[batch] + values[batch]
+                critic_loss=(returns-critic_value)**2
+                critic_loss = critic_loss.mean()
+
+                total_loss = actor_loss + 0.5*critic_loss
+
+                self.actor.optimizer.zero_grad()
+                self.critic.optimizer.zero_grad()
+                total_loss.backward()
+                self.actor.optimizer.step()
+                self.critic.optimizer.step()
+
+        self.memory.clear_memory()

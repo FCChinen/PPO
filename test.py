@@ -1,58 +1,25 @@
 import gym
-import torch
-from torch import nn
-from torch.distributions import Categorical
 import numpy as np
-import torch.nn.functional as F
-"""
-0 - Left
-1 - Down
-2 - Right
-3 - Up
-"""
+from ppo_torch import Agent
+from utils import plot_learning_curve
+from ppo_torch import ActorNetwork
+from newmaze import Maze
+if __name__ == '__main__':
+    #env = gym.make('FrozenLake-v0', is_slippery=False )
+    env = Maze()
+    N = 20
+    batch_size = 5
+    n_epochs = 4
+    alpha = 0.0003
+    agent = Agent(n_actions=env.action_space.n, batch_size=batch_size, alpha=alpha, n_epochs=n_epochs, input_dims=(1,))
 
-device = "cpu"
+    agent.load_models()
 
-def obs_to_torch(obs: np.ndarray) -> torch.Tensor:
-    return torch.tensor(obs, dtype=torch.float32, device=device) / 64.
-
-class FeedForwardNN(nn.Module):
-    def __init__(self, in_dim=64, out_dim=4):
-        super(FeedForwardNN, self).__init__()
-
-        self.layer1 = nn.Linear(in_dim, 128)
-        self.layer2 = nn.Linear(128, 128)
-        #self.layer3 = nn.Linear(128, out_dim)
-        self.pi_logits = nn.Linear(128, out_dim)
-        self.value = nn.Linear(128, 1)
-
-    def forward(self, obs):
-
-        h = F.relu(self.layer1(obs))
-        h = F.relu(self.layer2(h))
-        #output = self.layer3(h)
-        
-        pi = Categorical(logits=self.pi_logits(h))
-        value = self.value(h)
-
-        return pi, value
-
-neural = FeedForwardNN(1,4)
-
-env = gym.make('FrozenLake-v0', is_slippery=False)
-
-obs = obs_to_torch(env.reset())
-print('acabou de resetar: '+str(obs))
-# Jogar manualmente
-for _ in range(1000):
+    observation = env.reset()
+    done = False
     env.render()
-    #pi, value = neural(obs.unsqueeze(dim=0))
-    action = int(input("Digite uma ação entre: "))
+    while not done:
+        action, prob, val = agent.choose_action(observation)
+        observation_, reward, done, info = env.step(action)
+        env.render()
 
-    obs, reward, done, _ = env.step(action)
-    print('obs: ' + str(obs) + 'reward: ' +str(reward) + 'done: '+ str(done))
-    if done:
-        break
-
-
-env.close()

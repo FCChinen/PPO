@@ -92,8 +92,8 @@ class Maze(gym.Env):
     
     def get_reward(self):
         if self.obs in self.trees:
-            self.sum_reward -= 10
-            return -10
+            self.sum_reward -= 10000
+            return -1000
         elif self.obs in self.final_cricket:
             self.sum_reward += 1000
             return 1000
@@ -101,17 +101,17 @@ class Maze(gym.Env):
             self.sum_reward += 5
             return 5
         else:
-            """
             cur_y = self.obs % self.N
             cur_x = math.floor(self.obs / self.N)
             x_cricket = self.final_cricket[0] % self.N
             y_cricket = math.floor(self.final_cricket[0] / self.N)
-            ret = abs(cur_x-x_cricket) + abs(cur_y-y_cricket)
-            self.sum_reward += ret
+            ret = -1*(cur_x-x_cricket + cur_y-y_cricket)
+            #import pdb;breakpoint()
+            self.sum_reward -= ret
             return ret
-            """
-            self.sum_reward -=1
-            return -1
+
+            #self.sum_reward -=1
+            #return -1
 
     def get_next_pos(self, action):
         if action == 0: # down
