@@ -3,6 +3,7 @@ import numpy as np
 from ppo_torch import Agent
 from newmaze import Maze
 from utils import plot_learning_curve
+from matplotlib import pyplot as plt
 
 def took_action(action):
     if action == 0:
@@ -28,9 +29,9 @@ if __name__ == '__main__':
     agent = Agent(n_actions=env.action_space.n, batch_size=batch_size, alpha=alpha, n_epochs=n_epochs, input_dims=(1,)) # frozen lake
     #agent = Agent(n_actions=env.action_space.n, batch_size=batch_size, alpha=alpha, n_epochs=n_epochs, input_dims=env.observation_space.shape) # cartpole
 
-    n_games = 128
+    n_games = 10000
 
-    figure_file = 'plots/frozenlake.png'
+    figure_file = 'plots/runningavg.png'
 
     best_score = env.reward_range[0]
     score_history = []
@@ -66,5 +67,11 @@ if __name__ == '__main__':
                 'time_steps', n_steps, 'learning_steps', learn_iters)
     x = [i+1 for i in range(len(score_history))]
     plot_learning_curve(x, score_history, figure_file)
+
+    figure_scores, scores_plt = plt.subplots()
+    scores_plt.plot(x, score_history)
+
+    scores_plt.set(xlabel='Number of epochs', ylabel='Scores', title='Scores per epoch')
+    figure_scores.savefig("scores_history.png")
 
 
